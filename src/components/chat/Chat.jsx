@@ -1,12 +1,25 @@
 import { useEffect, useRef, useState } from "react"
 import "./chat.css"
 import EmojiPicker from "emoji-picker-react"
+import { arrayUnion, doc, onSnapshot, updateDoc } from "firebase/firestore";
+import { db } from "../../lib/firebase";
+import { useChatStore } from "../../lib/chatStore";
+import { useUserStore } from "../../lib/userStore";
+import { getDoc } from "firebase/firestore/lite";
 
 const Chat = () => {
 
   const [chat, setChat] = useState();
   const [open, setOpen] = useState(false);
   const [text,setText] = useState("");
+  const [img, setImg] = useState({
+    file: null,
+    url: "",
+  });
+
+  const { chatId, user } = useChatStore();
+  const { currentUser } = useUserStore();
+  
 
 
   const endRef = useRef(null)
@@ -15,14 +28,84 @@ const Chat = () => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   },  [])
 
+  useEffect(() => {
+    const unSub = onSnapshot(doc(db, "chats",  chatId), (res) =>{
+      setChat(res.data())
+    });
 
-
-
-
+    return () => {
+      unSub();
+    };
+  }, [chatId]);
 
   const handleEmoji = (e) => {
     setText((prev) => prev + e.emoji);
     setOpen(false);
+  };
+
+
+  const handleImg = (e) => {
+    if (e.target.files[0]) {
+      setImg({
+        file: e.target.files[0],
+        url: URL.createObjectURL(e.target.files[0]),
+      });
+    }
+  };
+
+  const handleSend = async () => {
+    if (text === "") return;
+
+    let imgUrl = null;
+
+    try {
+      if (img.file) {
+        imgUrl = await upload(img.file);
+      }
+
+      await updateDoc(doc(db, "chats", chatId), {
+        messages: arrayUnion({
+          senderId: currentUser.id,
+          text,
+          createdAt: new Date(),
+          ...(imgUrl && { img: imgUrl }),
+        }),
+      });
+
+      const userIDs = [currentUser.id, user.id];
+
+      userIDs.forEach(async (id) => {
+        const userChatsRef = doc(db, "userchats", id);
+        const userChatsSnapshot = await getDoc(userChatsRef);
+
+        if (userChatsSnapshot.exists()) {
+          const userChatsData = userChatsSnapshot.data();
+
+          const chatIndex = userChatsData.chats.findIndex(
+            (c) => c.chatId === chatId
+          );
+
+          userChatsData.chats[chatIndex].lastMessage = text;
+          userChatsData.chats[chatIndex].isSeen =
+            id === currentUser.id ? true : false;
+          userChatsData.chats[chatIndex].updatedAt = Date.now();
+
+          await updateDoc(userChatsRef, {
+            chats: userChatsData.chats,
+          });
+        }
+      });
+    } catch (err) {
+      console.log(err);
+    } finally{
+      setImg({
+        file: null,
+        url: "",
+      });
+  
+
+    setText("");
+    }
   };
 
  
@@ -30,9 +113,9 @@ const Chat = () => {
     <div className="chat">
       <div className="top">
         <div className="user">
-          <img src="./avatar.png" />
+        <img src={user?.avatar || "./avatar.png"} alt="" />
           <div className="texts">
-            <span>Jane Doe</span>
+            <span>{user?.username}</span>
             <p>Nem érdekelsz.</p>
           </div>
         </div>
@@ -44,42 +127,17 @@ const Chat = () => {
       </div>
 
       <div className="center">
-        <div className="message own">
-          <div className="texts">
-            <p>Valami teszt szöveg.</p>
-            <span>1 perce küldve</span>
-          </div>
-        </div>
 
-        <div className="message">
-          <img src="./avatar.png"/>
-          <div className="texts">
-            <p>Valami teszt szöveg.</p>
-            <span>1 perce küldve</span>
+        {chat?.messages?.map((message) => (
+          <div className="message own" key={message?.createdAt}>
+            <div className="texts">
+             {message.img && <img
+               src={message.img}/>}
+               <p>{message.text}</p>
+              <span>1 perce küldve</span>
+            </div>
           </div>
-        </div>
-
-        <div className="message own">
-          <div className="texts">
-            <p>Valami teszt szöveg.</p>
-            <span>1 perce küldve</span>
-          </div>
-        </div>
-
-        <div className="message">
-          <img src="./avatar.png"/>
-          <div className="texts">
-            <p>Valami teszt szöveg.</p>
-            <span>1 perce küldve</span>
-          </div>
-        </div>
-
-        <div className="message own">
-          <div className="texts">
-          <img src="https://kutyas.hatterkepek1.hu/kep/hatterkepek-kutyas_3.jpg"/>
-            <span>1 perce küldve</span>
-          </div>
-        </div>
+        ))}
         <div ref={endRef}></div>
       </div>
 
@@ -103,7 +161,9 @@ const Chat = () => {
        <EmojiPicker open={open} onEmojiClick={handleEmoji} />
        </div>
         </div>
-        <button className="send">Küldés</button>
+        <button className="send"
+        onClick={handleSend}
+        >Küldés</button>
       </div>
     </div>
   
