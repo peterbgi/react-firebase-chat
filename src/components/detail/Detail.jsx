@@ -1,3 +1,4 @@
+import { auth } from "../../lib/firebase"
 import "./detail.css"
 
 const Detail = () => {
