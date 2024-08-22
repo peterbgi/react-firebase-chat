@@ -5,7 +5,7 @@ import { arrayUnion, doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { useChatStore } from "../../lib/chatStore";
 import { useUserStore } from "../../lib/userStore";
-import { getDoc } from "firebase/firestore/lite";
+import { getDoc } from "firebase/firestore";
 
 const Chat = () => {
 
@@ -113,7 +113,7 @@ const Chat = () => {
     <div className="chat">
       <div className="top">
         <div className="user">
-        <img src={user?.avatar || "./avatar.png"} alt="" />
+        <img src={user?.avatar || "./avatar.png"} />
           <div className="texts">
             <span>{user?.username}</span>
             <p>Nem érdekelsz.</p>
